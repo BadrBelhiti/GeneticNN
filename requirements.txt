@@ -1,0 +1,8 @@
+# Machine learning library
+tensorflow
+
+# Math library mainly used for arrays and randomization
+numpy
+
+# Game engine library
+pygame
