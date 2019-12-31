@@ -4,12 +4,17 @@ from simengine import Player
 from pathlib import Path
 from datetime import datetime
 import time
-
+import re
 
 pool_size = 20
 current_pool = []
-
 players = []
+
+generation_specified = False
+loaded_generation = None
+
+model_specified = False
+model_subject = None
 
 
 def create_model():
@@ -17,16 +22,6 @@ def create_model():
     model.add(tf.keras.layers.Dense(2, input_shape=(2,), activation='relu'))
     model.add(tf.keras.layers.Dense(4, activation='sigmoid'))
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-
-    # weights = model.get_weights()
-
-    '''
-    for i in range(len(weights)):
-        for j in range(len(weights[i])):
-            weights[i][j] = np.random.uniform(-1, 1)
-    '''
-
-    # model.set_weights(weights)
 
     return model
 
@@ -61,7 +56,6 @@ def model_crossover(parent1, parent2):
 
 
 def model_mutate(weights):
-
     for i in range(len(weights)):
         for j in range(len(weights[i])):
             if np.random.uniform(0, 1) < 0.15:
@@ -71,8 +65,9 @@ def model_mutate(weights):
     return weights
 
 
-for i in range(pool_size):
-    current_pool.append(create_model())
+if not generation_specified and not model_specified:
+    for i in range(pool_size):
+        current_pool.append(create_model())
 
 
 def select_parent(fitness, median):
@@ -118,10 +113,10 @@ def next_generation():
         parent2 = select_parent(fitness, median)
 
         if parent1 is None:
-            parent1 = current_pool[np.random.randint(0, pool_size)]
+            parent1 = current_pool[np.random.randint(0, len(current_pool))]
 
         if parent2 is None:
-            parent2 = current_pool[np.random.randint(0, pool_size)]
+            parent2 = current_pool[np.random.randint(0, len(current_pool))]
 
         new_weights = model_mutate(model_crossover_weights(parent1.get_weights(), parent2.get_weights())[0])
         new_generation[i].set_weights(new_weights)
@@ -134,7 +129,7 @@ def next_generation():
 
 def current_total_fitness():
     total_fitness = 0
-    for i in range(pool_size):
+    for i in range(len(players)):
         total_fitness += players[i].fitness()
 
     return total_fitness
@@ -142,7 +137,7 @@ def current_total_fitness():
 
 def should_stop():
     progress = False
-    for i in range(pool_size):
+    for i in range(len(players)):
         player = players[i]
         last_fitness = player.last_fitness
         curr_fitness = player.fitness()
@@ -157,6 +152,30 @@ def create_players():
     for i in range(pool_size):
         color = np.random.uniform(0, 255, 3)
         players.append(Player(color))
+
+
+def load_player(model_path):
+    global model_subject, model_specified
+    model_subject = tf.keras.models.load_model(model_path)
+    current_pool.append(model_subject)
+    players.append(Player((200, 200, 200)))
+    model_specified = True
+
+
+def load_generation(path, size, load_best=True):
+    generation = re.search('\d+$', path)
+    print('Loading generation:', generation.group(), '...')
+
+    global loaded_generation, generation_specified, pool_size
+
+    for i in range(size):
+        current_pool.append(tf.keras.models.load_model(path + '/' + str(i) + '.h5'))
+
+    if load_best:
+        current_pool.append(tf.keras.models.load_model(path + '/best.h5'))
+
+    pool_size = size + 1 if load_best else size
+    generation_specified = True
 
 
 def save_current_generation():

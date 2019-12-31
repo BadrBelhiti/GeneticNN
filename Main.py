@@ -4,14 +4,14 @@ import geneticnn as gnn
 import simengine as eng
 from simengine import Player
 
-ai = True
-
 op_ai_enabled = False
-op_ai = Player((255, 255, 255)) if op_ai_enabled else None
-
+op_ai = Player((200, 200, 200)) if op_ai_enabled else None
 
 best_total_fitness = 1
 generation_score = 0
+
+# gnn.load_generation('models/2019-12-30 21:52:52.233808/generation14', 20)
+# gnn.load_player('models/2019-12-30 21:53:20.474513/generation15/best.h5')
 
 
 def next_round():
@@ -24,7 +24,33 @@ def next_round():
     generation_score = 0
 
 
-gnn.create_players()
+def act(player_num):
+    curr_player = gnn.players[player_num]
+    x = curr_player.player_x
+    y = curr_player.player_y
+
+    delta_x = eng.gold_x - x
+    delta_y = eng.gold_y - y
+
+    curr_player.set_last_fitness()
+
+    output = gnn.predict(0 if delta_x < 0 else 1, 0 if delta_y < 0 else 1, player_num)
+
+    if output[0] > 0.5:
+        curr_player.right()
+
+    if output[1] > 0.5:
+        curr_player.left()
+
+    if output[2] > 0.5:
+        curr_player.up()
+
+    if output[3] > 0.5:
+        curr_player.down()
+
+
+if not gnn.model_specified:
+    gnn.create_players()
 
 ticks = 0
 running = True
@@ -36,88 +62,48 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    # Calculate current fitness
-    current_fitness = gnn.current_total_fitness()
-
     # Reset round
-    if gnn.should_stop():
+    if not gnn.model_specified and gnn.should_stop():
         next_round()
 
-    best_total_fitness = max(gnn.current_total_fitness(), best_total_fitness)
-
+    # Handle 'quit', 'skip', and 'save' keyboard shortcuts
     keys = pygame.key.get_pressed()
 
     if keys[pygame.K_ESCAPE]:
         running = False
 
-    if keys[pygame.K_SPACE]:
+    if keys[pygame.K_SPACE] and not gnn.model_specified:
         next_round()
 
     if keys[pygame.K_F1]:
         gnn.save_current_generation()
 
-    if not ai:
+    if op_ai_enabled:
+        op_ai_delta_x = eng.gold_x - op_ai.player_x
+        op_ai_delta_y = eng.gold_y - op_ai.player_y
 
-        if keys[pygame.K_d]:
-            gnn.players[0].right()
+        # non-ML AI
+        if np.abs(op_ai_delta_x) > eng.gold_size - 1:
+            op_ai.right() if op_ai_delta_x > 0 else op_ai.left()
 
-        if keys[pygame.K_a]:
-            gnn.players[0].left()
+        if np.abs(op_ai_delta_y) > eng.gold_size - 1:
+            op_ai.down() if op_ai_delta_y > 0 else op_ai.up()
 
-        if keys[pygame.K_w]:
-            gnn.players[0].up()
+        if op_ai.check_collision():
+            op_ai.increment_score()
+            eng.spawn_gold()
 
-        if keys[pygame.K_s]:
-            gnn.players[0].down()
+    for i in range(len(gnn.players)):
+        player = gnn.players[i]
 
-    else:
-        # '''
+        act(i)
 
-        if op_ai_enabled:
-            op_ai_delta_x = eng.gold_x - op_ai.player_x
-            op_ai_delta_y = eng.gold_y - op_ai.player_y
+        player.ensure_bounds()
 
-            if np.abs(op_ai_delta_x) > eng.gold_size - 1:
-                op_ai.right() if op_ai_delta_x > 0 else op_ai.left()
-
-            if np.abs(op_ai_delta_y) > eng.gold_size - 1:
-                op_ai.down() if op_ai_delta_y > 0 else op_ai.up()
-
-            if op_ai.check_collision():
-                op_ai.increment_score()
-                eng.spawn_gold()
-
-        for i in range(len(gnn.players)):
-            player = gnn.players[i]
-            x = player.player_x
-            y = player.player_y
-
-            delta_x = eng.gold_x - x
-            delta_y = eng.gold_y - y
-
-            player.set_last_fitness()
-
-            output = gnn.predict(0 if delta_x < 0 else 1, 0 if delta_y < 0 else 1, i)
-
-            if output[0] > 0.5:
-                player.right()
-
-            if output[1] > 0.5:
-                player.left()
-
-            if output[2] > 0.5:
-                player.up()
-
-            if output[3] > 0.5:
-                player.down()
-
-            gnn.players[i].ensure_bounds()
-
-            if gnn.players[i].check_collision():
-                generation_score += 1
-                player.increment_score()
-                eng.spawn_gold()
-        # '''
+        if player.check_collision():
+            generation_score += 1
+            player.increment_score()
+            eng.spawn_gold()
 
     eng.draw(generation_score)
 
@@ -127,4 +113,4 @@ while running:
     eng.update_display()
     ticks += 1
 
-pygame.quit()
+eng.shutdown()
